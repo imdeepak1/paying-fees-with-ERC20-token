@@ -8,7 +8,7 @@ app.use(express.json())
 app.use(cors());
 const web3 = new Web3('https://sepolia.infura.io/v3/process.env.INFURA_KEY');
 const contractAddress = "0x293eC2FBAF729ea3F03E33Fe3c00c095E6136Ee9";
-const privateKey = "process.env.PRIVATE_KEY"
+const privateKey = process.env.PRIVATE_KEY
 const ERC20ABI = [
   {
     inputs: [],

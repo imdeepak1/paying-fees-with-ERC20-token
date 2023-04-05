@@ -271,7 +271,7 @@ function App() {
         </Table>
       </div>
       <a
-        href="https://goerli.arbiscan.io/address/process.env.CONTRACT_ADDRESS#readContract"
+        href="https://goerli.arbiscan.io/address/0x90Ea0DC9147c30F7d78A4F5c1a233Fe1D8bbbC8A#readContract"
         target="_blank"
         rel="noopener noreferrer"
       >
