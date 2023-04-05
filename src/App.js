@@ -1,18 +1,10 @@
 import "./App.css";
-import jsPDF from "jspdf";
 import Web3 from "web3";
-import SignContract from "./abis/SignContract.json";
 import React, { useState } from "react";
-import { Buffer } from "buffer";
-import html2canvas from "html2canvas";
 import { Table } from "react-bootstrap";
-import * as IPFS from "ipfs-core";
 
 function App() {
-  let contract, accounts;
-
-  const [ipfsHash, setIpfsHash] = useState(null);
-  const [buffer, setBuffer] = useState("");
+  let accounts;
   const [ethAddress, setEthAddress] = useState("");
   const [storeHashTransaction, setStoreHashTransaction] = useState("");
   const [blockNumber, setBlockNumber] = useState("");
@@ -29,15 +21,7 @@ function App() {
     }
     const web3 = window.web3;
     accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-    console.log(accounts);
-    const contractAddress = "0x90Ea0DC9147c30F7d78A4F5c1a233Fe1D8bbbC8A";
-    setEthAddress(contractAddress);
-    if (contractAddress) {
-      contract = new web3.eth.Contract(SignContract.abi, contractAddress);
-      console.log(contract);
-    } else {
-      window.alert("Smart contract not deployed to detected network.");
-    }
+    return web3;
   }
 
   const [formData, setFormData] = useState({
@@ -58,64 +42,58 @@ function App() {
     }));
   };
 
-  const printPDF = () => {
-    let data = document.getElementById("divToprint");
-    html2canvas(data).then((canvas) => {
-      let fileWidth = 208;
-      let fileHeight = (canvas.height * fileWidth) / canvas.width;
-      const FILEURI = canvas.toDataURL("image/png");
-      let pdf = new jsPDF("p", "mm", "a4");
-      let position = 0;
-      pdf.addImage(FILEURI, "PNG", 0, position, fileWidth, fileHeight);
-      pdf.save("contract.pdf");
-    });
-  };
-
-  const captureFile = async (event) => {
+  const submitTransaction = async (event) => {
     event.preventDefault();
-    const file = event.target.files[0];
-    const reader = new window.FileReader();
-    reader.readAsArrayBuffer(file);
-    reader.onloadend = async () => {
-      const bufferIs = await Buffer(reader.result);
-      await setBuffer(bufferIs);
+    const web3 = await loadweb3();
+    const signature = await web3.eth.personal.sign(formData.name, accounts[0]);
+    const recoveredSigner = await web3.eth.accounts.recover(
+      formData.name,
+      signature
+    );
+    const transactionIs = {
+      from: recoveredSigner,
+      contractId: formData.contractId,
+      name: formData.name,
     };
-  };
 
-  const submitPdfToIPFS = async (event) => {
-    event.preventDefault();
-    const ipfs = await IPFS.create({ repo: "ok" + Math.random() });
-    console.log("This is buffer", buffer);
-    const ipfsHash = await ipfs.add(buffer);
-    console.log("ipfsHash after ipfs.add:", ipfsHash.path);
-    setIpfsHash(ipfsHash.path);
-    await loadweb3();
-    const receipt = await contract.methods
-      .storeContract(formData.contractId, ipfsHash.path, formData.name)
-      .send({ from: accounts[0] });
-    setStoreHashTransaction(receipt.transactionHash);
-    setBlockNumber(receipt.blockNumber);
-    console.log("receipt as returned by smart contract:", receipt);
+    const responseIs = await fetch("http://localhost:3002/api/createContract", {
+      method: "POST",
+      body: JSON.stringify(transactionIs),
+      headers: { "Content-Type": "application/json" },
+    })
+    const apiReponse = await responseIs.json();
+    console.log("this is response txhash", await apiReponse);
+    // setStoreHashTransaction(apiReponse.txHash.transactionHash);
+    // setBlockNumber(apiReponse.txHash.blockNumber);
+    // setEthAddress(apiReponse.contractAddress);
   };
 
   const signedContractToIPFS = async (event) => {
     event.preventDefault();
-    const ipfs = await IPFS.create({ repo: "ok" + Math.random() });
-    console.log("This is buffer", buffer);
-    const ipfsHash = await ipfs.add(buffer);
-    console.log("ipfsHash after ipfs.add:", ipfsHash.path);
-    setIpfsHash(ipfsHash.path);
-    await loadweb3();
-    const receipt = await contract.methods
-      .storeSignedContract(
-        formData.contractId,
-        formData.signerName,
-        ipfsHash.path
-      )
-      .send({ from: accounts[0] });
-    setStoreHashTransaction(receipt.transactionHash);
-    setBlockNumber(receipt.blockNumber);
-    console.log("receipt as returned by smart contract:", receipt);
+    const web3 = await loadweb3();
+
+    const signature = await web3.eth.personal.sign(formData.name, accounts[0]);
+    const recoveredSigner = await web3.eth.accounts.recover(
+      formData.name,
+      signature
+    );
+
+    const transactionIs = {
+      from: recoveredSigner,
+      contractId: formData.contractId,
+      signerName: formData.signerName,
+    };
+    const reposnse = await fetch("http://localhost:3002/api/signContract", {
+      method: "POST",
+      body: JSON.stringify(transactionIs),
+      headers: { "Content-Type": "application/json" },
+    });
+    const apiReponse = await reposnse.json();
+
+    setStoreHashTransaction(apiReponse.txHash.transactionHash);
+    setBlockNumber(apiReponse.txHash.blockNumber);
+    setEthAddress(apiReponse.contractAddress);
+    console.log("Receipt as returned by smart contract:", reposnse);
   };
 
   return (
@@ -224,59 +202,10 @@ function App() {
                 </div>
                 <p>&nbsp;</p>
                 <div className="col-12">
-                  <label htmlFor="projectName" className="form-label">
-                    Project Name
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="projectName"
-                    onChange={onChangeHandle}
-                    placeholder="ABC Project....."
-                  />
-                </div>
-                <p>&nbsp;</p>
-                <div className="col-12">
-                  <label htmlFor="projectedAmount" className="form-label">
-                    Amount to Sing Contract
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="projectedAmount"
-                    onChange={onChangeHandle}
-                    placeholder="3000$"
-                  />
-                </div>
-                <p>&nbsp;</p>
-                <div className="col-md-6">
-                  <label htmlFor="officeAddress" className="form-label">
-                    Office Address
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="officeAddress"
-                    onChange={onChangeHandle}
-                  />
-                </div>
-                <div className="col-md-6">
-                  <label htmlFor="formSubmitDate" className="form-label">
-                    Date
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    name="formSubmitDate"
-                    onChange={onChangeHandle}
-                  />
-                </div>
-                <p>&nbsp;</p>
-                <div className="col-12">
                   <button
                     className="btn btn-primary"
                     type="button"
-                    onClick={printPDF}
+                    onClick={submitTransaction}
                   >
                     Create Contract
                   </button>
@@ -298,7 +227,7 @@ function App() {
                     className="btn btn-primary"
                     type="button"
                     id="print"
-                    onClick={printPDF}
+                    onClick={signedContractToIPFS}
                   >
                     Sign Contract
                   </button>
@@ -307,20 +236,6 @@ function App() {
               </form>
             </div>
           </span>
-        </div>
-        <p>&nbsp;</p>
-        <h4>Submit Created Contract to IPFS </h4>
-        <form onSubmit={submitPdfToIPFS}>
-          <input type="file" onChange={captureFile} />
-          <input type="submit" />
-        </form>
-        <p>&nbsp;</p>
-        <div>
-          <h4>Submit Signed Contract to IPFS </h4>
-          <form onSubmit={signedContractToIPFS}>
-            <input type="file" onChange={captureFile} />
-            <input type="submit" />
-          </form>
         </div>
       </div>
       <p>&nbsp;</p>
@@ -348,26 +263,6 @@ function App() {
               <td>{formData.contractId}</td>
             </tr>
             <tr>
-              <td>Project Name</td>
-              <td> : </td>
-              <td>{formData.projectName}</td>
-            </tr>
-            <tr>
-              <td>Amount to Sign Contract</td>
-              <td> : </td>
-              <td>{formData.projectedAmount}</td>
-            </tr>
-            <tr>
-              <td>Office Address</td>
-              <td> : </td>
-              <td>{formData.officeAddress}</td>
-            </tr>
-            <tr>
-              <td>Date</td>
-              <td> : </td>
-              <td>{formData.formSubmitDate}</td>
-            </tr>
-            <tr>
               <td>Signer Name</td>
               <td> : </td>
               <td>{formData.signerName}</td>
@@ -375,7 +270,11 @@ function App() {
           </tbody>
         </Table>
       </div>
-      <a href="https://goerli.arbiscan.io/address/0x90Ea0DC9147c30F7d78A4F5c1a233Fe1D8bbbC8A#readContract" target="_blank" rel="noopener noreferrer">
+      <a
+        href="https://goerli.arbiscan.io/address/process.env.CONTRACT_ADDRESS#readContract"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
         <button>Check Stored Details On Arbiscan</button>
       </a>
       <p>&nbsp;</p>
@@ -392,14 +291,9 @@ function App() {
         </thead>
         <tbody>
           <tr>
-            <td>Smart Contract address storing IPFS hash</td>
+            <td>Smart Contract address</td>
             <td> : </td>
             <td>{ethAddress}</td>
-          </tr>
-          <tr>
-            <td>IPFS Hash to store on Arbitrum</td>
-            <td> : </td>
-            <td>{ipfsHash}</td>
           </tr>
           <tr>
             <td>transaction's BlockNumber on Arbitrum</td>
